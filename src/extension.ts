@@ -12,6 +12,7 @@ import { DeviceTreeProvider } from "./ui/deviceTreeProvider";
 import { DetectedDevice } from "./devices/types";
 import { SerialMonitorManager } from "./serial/serialMonitor";
 import { Flasher } from "./flash/flasher";
+import { Deployer } from "./deploy/deployer";
 
 /** Common baud rates offered by the Set Baud Rate quick pick. */
 const COMMON_BAUD_RATES = [
@@ -23,6 +24,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const treeProvider = new DeviceTreeProvider(scanner);
   const monitors = new SerialMonitorManager();
   const flasher = new Flasher(monitors);
+  const deployer = new Deployer(monitors);
 
   const treeView = vscode.window.createTreeView("hardwareDevices", {
     treeDataProvider: treeProvider,
@@ -172,6 +174,16 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   );
 
+  const deployToDeviceCmd = vscode.commands.registerCommand(
+    "hardwareHacker.deployToDevice",
+    async (node?: DeviceNode) => {
+      const path = await resolveTargetPath(node, scanner);
+      if (path) {
+        await deployer.deploy(path);
+      }
+    }
+  );
+
   const eraseFlashCmd = vscode.commands.registerCommand(
     "hardwareHacker.eraseFlash",
     async (node?: DeviceNode) => {
@@ -196,6 +208,7 @@ export function activate(context: vscode.ExtensionContext): void {
     flashFirmwareCmd,
     flashMicroPythonCmd,
     openReplCmd,
+    deployToDeviceCmd,
     eraseFlashCmd
   );
 

@@ -112,6 +112,12 @@
         "icon": "$(terminal)"
       },
       {
+        "command": "hardwareHacker.deployToDevice",
+        "title": "Deploy Python to Device…",
+        "category": "Hardware Hacker",
+        "icon": "$(rocket)"
+      },
+      {
         "command": "hardwareHacker.eraseFlash",
         "title": "Erase Flash",
         "category": "Hardware Hacker",
@@ -171,6 +177,25 @@
           "command": "hardwareHacker.eraseFlash",
           "when": "view == hardwareDevices && viewItem == hardwareDevice",
           "group": "2_flash@4"
+        },
+        {
+          "command": "hardwareHacker.deployToDevice",
+          "when": "view == hardwareDevices && viewItem == hardwareDevice",
+          "group": "3_deploy@1"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "hardwareHacker.deployToDevice",
+          "when": "resourceExtname == .py",
+          "group": "navigation"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "hardwareHacker.deployToDevice",
+          "when": "resourceExtname == .py",
+          "group": "navigation"
         }
       ]
     },
@@ -223,6 +248,21 @@
           "type": "number",
           "default": 115200,
           "description": "Baud rate used when opening the MicroPython REPL (MicroPython's REPL runs at 115200)."
+        },
+        "hardwareHacker.deploy.mpremotePath": {
+          "type": "string",
+          "default": "",
+          "description": "Path or command for mpremote (used by \"Deploy Python to Device\"). Leave empty to auto-detect (mpremote, or python -m mpremote)."
+        },
+        "hardwareHacker.deploy.sourceRoot": {
+          "type": "string",
+          "default": "",
+          "description": "Base directory used to resolve imports and compute on-device paths when deploying. Leave empty to use the deployed file's own folder."
+        },
+        "hardwareHacker.deploy.resetAfter": {
+          "type": "boolean",
+          "default": true,
+          "description": "After installing a file as main.py, reset the board so it runs immediately."
         }
       }
     }
