@@ -5,8 +5,11 @@
 //   - `esptool.py`      (classic script name)
 //   - `python -m esptool` / `python3 -m esptool` / `py -m esptool`
 //
-// We probe candidates by running `<candidate> --version` and keeping the first
-// that exits 0. The result is cached for the session.
+// We probe candidates by running `<candidate> --help` and keeping the first
+// that exits 0. (`--help` works across esptool v4 and the Click-based v5 CLI;
+// v5 dropped the `--version` flag in favor of a `version` subcommand, so probing
+// with `--version` would wrongly report esptool as missing.) The result is
+// cached for the session.
 
 import * as vscode from "vscode";
 import { spawn } from "child_process";
@@ -55,7 +58,7 @@ export async function locateEsptool(): Promise<EsptoolInvocation | undefined> {
   return undefined;
 }
 
-/** Run `<candidate> --version` and resolve true iff it exits 0 within the timeout. */
+/** Run `<candidate> --help` and resolve true iff it exits 0 within the timeout. */
 function verify(inv: EsptoolInvocation): Promise<boolean> {
   return new Promise((resolve) => {
     let settled = false;
@@ -68,7 +71,7 @@ function verify(inv: EsptoolInvocation): Promise<boolean> {
 
     let child;
     try {
-      child = spawn(inv.command, [...inv.baseArgs, "--version"], {
+      child = spawn(inv.command, [...inv.baseArgs, "--help"], {
         windowsHide: true,
       });
     } catch {
