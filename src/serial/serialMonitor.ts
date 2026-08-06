@@ -34,14 +34,15 @@ export class SerialPseudoterminal implements vscode.Pseudoterminal {
   constructor(
     readonly path: string,
     public baudRate: number,
-    private readonly opts: MonitorOptions
+    private readonly opts: MonitorOptions,
+    private readonly label = "Serial Monitor"
   ) {
     this.connection = new SerialConnection(path, baudRate);
   }
 
   // Called by VS Code when the terminal is first shown.
   open(): void {
-    this.banner(`Serial Monitor — ${this.path} @ ${this.baudRate} baud`);
+    this.banner(`${this.label} — ${this.path} @ ${this.baudRate} baud`);
 
     this.connection.onData((chunk) => {
       // Terminals need CRLF; promote bare LF so lines don't stair-step.
@@ -148,6 +149,21 @@ interface MonitorSession {
 }
 
 /**
+ * Optional overrides for a monitor session. Anything omitted falls back to the
+ * `hardwareHacker.monitor.*` settings. Used by the MicroPython REPL, which needs
+ * fixed 115200 baud, local echo off (the REPL echoes its own characters), and a
+ * bare CR on Enter.
+ */
+export interface MonitorOverrides {
+  baudRate?: number;
+  localEcho?: boolean;
+  /** Raw bytes sent on Enter (already decoded, not the config enum). */
+  lineEnding?: string;
+  /** Terminal name and banner label, e.g. "MicroPython REPL". */
+  label?: string;
+}
+
+/**
  * Manages serial monitor sessions — at most one per port path. Resolves the
  * "target" for baud/send/disconnect commands from either the tree selection or
  * the currently active terminal.
@@ -171,17 +187,24 @@ export class SerialMonitorManager implements vscode.Disposable {
   }
 
   /** Open (or reveal) the monitor for a port. Returns the session. */
-  open(path: string): MonitorSession {
+  open(path: string, overrides?: MonitorOverrides): MonitorSession {
     const existing = this.sessions.get(path);
     if (existing) {
       existing.terminal.show();
       return existing;
     }
     const opts = this.readOptions();
-    const baud = this.readBaudRate();
-    const pty = new SerialPseudoterminal(path, baud, opts);
+    if (overrides?.localEcho !== undefined) {
+      opts.localEcho = overrides.localEcho;
+    }
+    if (overrides?.lineEnding !== undefined) {
+      opts.lineEnding = overrides.lineEnding;
+    }
+    const baud = overrides?.baudRate ?? this.readBaudRate();
+    const label = overrides?.label ?? "Serial Monitor";
+    const pty = new SerialPseudoterminal(path, baud, opts, label);
     const terminal = vscode.window.createTerminal({
-      name: `Serial ${path}`,
+      name: overrides?.label ? `${label} ${path}` : `Serial ${path}`,
       pty,
     });
     const session: MonitorSession = { path, terminal, pty };

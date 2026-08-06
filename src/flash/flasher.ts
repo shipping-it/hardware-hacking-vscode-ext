@@ -1,4 +1,5 @@
-// Orchestrates esptool operations: read chip info, flash firmware, erase flash.
+// Orchestrates esptool operations: read chip info, flash firmware, erase flash,
+// and the guided "flash MicroPython" flow (download + erase + write).
 //
 // Every operation:
 //   1. locates esptool (or bails with an install hint),
@@ -7,9 +8,21 @@
 //   3. runs esptool in a process-backed terminal so the user sees live progress.
 
 import * as vscode from "vscode";
-import { ProcessPseudoterminal } from "./processTerminal";
+import * as fs from "fs";
+import * as path from "path";
+import { ProcessPseudoterminal, CommandStep } from "./processTerminal";
 import { locateEsptool, esptoolInstallHint, EsptoolInvocation } from "./esptool";
 import { SerialMonitorManager } from "../serial/serialMonitor";
+import {
+  fetchFirmwareList,
+  downloadFirmware,
+  offsetForBoard,
+  looksLikeEsp32Board,
+  FirmwareEntry,
+} from "./micropython";
+
+/** Board id used by default for the MicroPython download flow. */
+const DEFAULT_MICROPYTHON_BOARD = "ESP32_GENERIC_S3";
 
 export class Flasher {
   constructor(private readonly monitors: SerialMonitorManager) {}
@@ -69,6 +82,62 @@ export class Flasher {
     this.run(path, inv, ["erase_flash"]);
   }
 
+  /**
+   * Guided MicroPython install: pick a board + version from micropython.org,
+   * download the image, then erase and write it in one terminal.
+   */
+  async flashMicroPython(devicePath: string): Promise<void> {
+    const inv = await this.ensureEsptool();
+    if (!inv) {
+      return;
+    }
+
+    const boardId = await this.askBoardId();
+    if (!boardId) {
+      return;
+    }
+    if (!looksLikeEsp32Board(boardId)) {
+      void vscode.window.showErrorMessage(
+        `"${boardId}" doesn't look like an ESP32 board. This flow flashes ` +
+          "ESP32-family images via esptool; other ports (rp2, stm32, ...) use " +
+          "different tools."
+      );
+      return;
+    }
+
+    const entry = await this.pickFirmware(boardId);
+    if (!entry) {
+      return;
+    }
+
+    const localPath = await this.downloadWithProgress(entry);
+    if (!localPath) {
+      return;
+    }
+
+    const offset = offsetForBoard(boardId);
+    const confirmed = await vscode.window.showWarningMessage(
+      `Flash MicroPython ${entry.version} to ${devicePath}?\n\n` +
+        `This ERASES ALL flash, then writes ${entry.fileName} at ${offset}. ` +
+        "Erasing wipes existing firmware and stored data and cannot be undone.",
+      { modal: true },
+      "Erase & Flash"
+    );
+    if (confirmed !== "Erase & Flash") {
+      this.cleanupTemp(localPath);
+      return;
+    }
+
+    await this.freePort(devicePath);
+    const steps: CommandStep[] = [
+      this.step(devicePath, inv, ["erase_flash"]),
+      this.step(devicePath, inv, ["write_flash", offset, localPath]),
+    ];
+    this.runSteps(`esptool micropython ${devicePath}`, steps, () =>
+      this.cleanupTemp(localPath)
+    );
+  }
+
   // --- internals -----------------------------------------------------------
 
   private async ensureEsptool(): Promise<EsptoolInvocation | undefined> {
@@ -79,25 +148,45 @@ export class Flasher {
     return inv;
   }
 
-  /** Build the full esptool arg list and launch it in a terminal. */
+  /** Build one esptool CommandStep (base args + port/baud + operation). */
+  private step(
+    path: string,
+    inv: EsptoolInvocation,
+    operationArgs: string[]
+  ): CommandStep {
+    return {
+      command: inv.command,
+      args: [
+        ...inv.baseArgs,
+        "--port",
+        path,
+        "--baud",
+        String(this.flashBaudRate()),
+        ...operationArgs,
+      ],
+    };
+  }
+
+  /** Build a single-step esptool invocation and launch it in a terminal. */
   private run(
     path: string,
     inv: EsptoolInvocation,
     operationArgs: string[]
   ): void {
-    const args = [
-      ...inv.baseArgs,
-      "--port",
-      path,
-      "--baud",
-      String(this.flashBaudRate()),
-      ...operationArgs,
-    ];
-    const pty = new ProcessPseudoterminal(inv.command, args);
-    const terminal = vscode.window.createTerminal({
-      name: `esptool ${path}`,
-      pty,
-    });
+    this.runSteps(`esptool ${path}`, [this.step(path, inv, operationArgs)]);
+  }
+
+  /** Launch a (possibly multi-step) esptool run in a terminal. */
+  private runSteps(
+    name: string,
+    steps: CommandStep[],
+    onClose?: () => void
+  ): void {
+    const pty = new ProcessPseudoterminal(steps);
+    if (onClose) {
+      pty.onDidClose(() => onClose());
+    }
+    const terminal = vscode.window.createTerminal({ name, pty });
     terminal.show();
   }
 
@@ -107,6 +196,132 @@ export class Flasher {
       this.monitors.close(path);
       await delay(400);
     }
+  }
+
+  /** Ask which board to download MicroPython for (default from settings). */
+  private async askBoardId(): Promise<string | undefined> {
+    const configured = vscode.workspace
+      .getConfiguration("hardwareHacker.flash")
+      .get<string>("micropythonBoard", DEFAULT_MICROPYTHON_BOARD)
+      .trim();
+    const value = await vscode.window.showInputBox({
+      title: "Flash MicroPython — board",
+      prompt:
+        "MicroPython board id (see the URL on micropython.org/download, e.g. " +
+        "ESP32_GENERIC_S3, ESP32_GENERIC, ESP32_GENERIC_C3).",
+      value: configured || DEFAULT_MICROPYTHON_BOARD,
+      validateInput: (v) =>
+        /^[A-Za-z0-9_]+$/.test(v.trim())
+          ? undefined
+          : "Use the board id exactly as on micropython.org (letters, digits, _).",
+    });
+    return value?.trim();
+  }
+
+  /** Fetch the board's firmware list and let the user pick a version. */
+  private async pickFirmware(
+    boardId: string
+  ): Promise<FirmwareEntry | undefined> {
+    let entries: FirmwareEntry[];
+    try {
+      entries = await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: `Fetching MicroPython builds for ${boardId}…`,
+        },
+        () => fetchFirmwareList(boardId)
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      void vscode.window.showErrorMessage(
+        `Couldn't fetch firmware list for ${boardId}: ${msg}`
+      );
+      return undefined;
+    }
+
+    if (entries.length === 0) {
+      void vscode.window.showErrorMessage(
+        `No firmware images found for "${boardId}". Check the board id at ` +
+          "micropython.org/download."
+      );
+      return undefined;
+    }
+
+    type FwItem = vscode.QuickPickItem & { entry?: FirmwareEntry };
+    const stable = entries.filter((e) => !e.nightly);
+    const nightly = entries.filter((e) => e.nightly);
+    const items: FwItem[] = [];
+    const toItem = (e: FirmwareEntry): FwItem => ({
+      label: e.version,
+      description: e.variant ? e.variant : "standard",
+      detail: e.fileName,
+      entry: e,
+    });
+    if (stable.length > 0) {
+      items.push({
+        label: "Stable releases",
+        kind: vscode.QuickPickItemKind.Separator,
+      });
+      items.push(...stable.map(toItem));
+    }
+    if (nightly.length > 0) {
+      items.push({
+        label: "Nightly / preview",
+        kind: vscode.QuickPickItemKind.Separator,
+      });
+      items.push(...nightly.map(toItem));
+    }
+
+    const picked = await vscode.window.showQuickPick(items, {
+      title: `MicroPython for ${boardId}`,
+      placeHolder: "Select a version to download and flash",
+      matchOnDetail: true,
+    });
+    return picked?.entry;
+  }
+
+  /** Download the chosen image to a temp file with a progress notification. */
+  private async downloadWithProgress(
+    entry: FirmwareEntry
+  ): Promise<string | undefined> {
+    try {
+      return await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: `Downloading ${entry.fileName}`,
+        },
+        (progress) => {
+          let lastPct = 0;
+          return downloadFirmware(entry, (received, total) => {
+            if (total > 0) {
+              const pct = Math.floor((received / total) * 100);
+              if (pct > lastPct) {
+                progress.report({
+                  increment: pct - lastPct,
+                  message: `${pct}%`,
+                });
+                lastPct = pct;
+              }
+            } else {
+              progress.report({
+                message: `${(received / 1_000_000).toFixed(1)} MB`,
+              });
+            }
+          });
+        }
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      void vscode.window.showErrorMessage(`Download failed: ${msg}`);
+      return undefined;
+    }
+  }
+
+  /** Remove a downloaded temp image (and its mkdtemp dir) after flashing. */
+  private cleanupTemp(filePath: string): void {
+    fs.rm(path.dirname(filePath), { recursive: true, force: true }, () => {
+      /* best effort */
+    });
   }
 
   /** Ask which flash offset to write to, with ESP32-aware presets. */

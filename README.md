@@ -157,6 +157,22 @@ terminal tab (ANSI colors, scrollback, copy/paste, and find all work).
 | `hardwareHacker.monitor.lineEnding` | `crlf` | Bytes sent on Enter (`crlf`/`lf`/`cr`/`none`) |
 | `hardwareHacker.monitor.localEcho` | `true` | Echo typed characters locally |
 
+### MicroPython REPL
+
+Once a board is running MicroPython, open an interactive **REPL** over serial:
+
+- **Open:** click the **terminal** icon on a device row, or run **Hardware Hacker:
+  Open MicroPython REPL** from the Command Palette.
+- It's a serial monitor pre-tuned for MicroPython: **115200 baud**, **local echo off**
+  (the REPL echoes your keystrokes itself), and a bare **CR** on Enter.
+- Press **Enter** for the `>>>` prompt. **Ctrl-C** interrupts a running program;
+  **Ctrl-D** soft-reboots. **Ctrl-E** enters paste mode. (These are passed straight
+  through to the device.)
+
+| Setting | Default | Meaning |
+|---------|---------|---------|
+| `hardwareHacker.repl.baudRate` | `115200` | Baud rate used when opening the MicroPython REPL |
+
 ### Firmware flashing
 
 Flash and inspect ESP32 chips using Espressif's [`esptool`](https://github.com/espressif/esptool).
@@ -167,14 +183,35 @@ access) and runs in a terminal so you see live progress.
   manufacturer, and MAC.
 - **Flash Firmware…** — pick a `.bin`, choose an offset (presets: `0x10000` app,
   `0x0` merged image / ESP32-S3 bootloader, `0x8000` partition table), then `write_flash`.
+- **Flash MicroPython…** — a guided install (see below).
 - **Erase Flash** — `erase_flash` after a confirmation prompt (destructive).
 
-All three are on the device right-click menu and the Command Palette.
+All are on the device right-click menu and the Command Palette.
+
+#### Flash MicroPython…
+
+One command downloads the right image from
+[micropython.org](https://micropython.org/download/) and installs it:
+
+1. Confirm the **board id** (defaults to `hardwareHacker.flash.micropythonBoard`,
+   i.e. `ESP32_GENERIC_S3` — it's the id in the `micropython.org/download/<ID>/` URL).
+2. Pick a **version** from the fetched list (stable releases first, then
+   nightly/preview builds; variants like `SPIRAM_OCT` are labeled).
+3. The image downloads to a temp file, then — after one confirmation — the extension
+   runs **`erase_flash`** followed by **`write_flash`** in a terminal so you see live
+   progress. The flash offset is chosen for the chip automatically (`0x0` for
+   ESP32-S3/-C3/-C6/-H2, `0x1000` for the classic ESP32 / -S2).
+
+> Flashing MicroPython **always erases the whole chip first** (recommended when
+> coming from other firmware), so it wipes any existing firmware and stored files.
+
+When it finishes, use **Open MicroPython REPL** (above) to talk to the board.
 
 | Setting | Default | Meaning |
 |---------|---------|---------|
 | `hardwareHacker.flash.esptoolPath` | *(empty)* | Override esptool command/path; empty = auto-detect |
 | `hardwareHacker.flash.baudRate` | `460800` | Baud rate used for flashing/erasing |
+| `hardwareHacker.flash.micropythonBoard` | `ESP32_GENERIC_S3` | Default board id for **Flash MicroPython** |
 
 The extension auto-detects `esptool`, `esptool.py`, or `python -m esptool`.
 
@@ -224,6 +261,7 @@ extension to pick it up.
 - [x] Detect + identify connected serial/USB devices (Milestone 1).
 - [x] Interactive serial monitor — read/write, baud rate, line endings (Milestone 2).
 - [x] Firmware flashing via `esptool` — read chip info / write_flash / erase_flash (Milestone 3).
+- [x] Guided MicroPython install (download from micropython.org + erase + flash) and a serial REPL (Milestone 4).
 - [ ] Raw USB (libusb) detection for DFU/JTAG-only modes that don't expose a serial port.
 
 ## Project layout
@@ -241,8 +279,9 @@ src/
     serialMonitor.ts        Pseudoterminal + session manager (the monitor)
   flash/
     esptool.ts              locate esptool (esptool / esptool.py / python -m esptool)
-    processTerminal.ts      Pseudoterminal that runs a child process (live progress)
-    flasher.ts              read chip info / write_flash / erase_flash orchestration
+    micropython.ts          fetch/parse micropython.org firmware list + download + offset
+    processTerminal.ts      Pseudoterminal that runs child process step(s) (live progress)
+    flasher.ts              chip info / write_flash / erase_flash / flash MicroPython
   ui/
     deviceTreeProvider.ts   the Activity Bar Devices tree
 ```

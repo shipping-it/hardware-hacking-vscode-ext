@@ -99,6 +99,18 @@
         "icon": "$(cloud-upload)"
       },
       {
+        "command": "hardwareHacker.flashMicroPython",
+        "title": "Flash MicroPython…",
+        "category": "Hardware Hacker",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "hardwareHacker.openRepl",
+        "title": "Open MicroPython REPL",
+        "category": "Hardware Hacker",
+        "icon": "$(terminal)"
+      },
+      {
         "command": "hardwareHacker.eraseFlash",
         "title": "Erase Flash",
         "category": "Hardware Hacker",
@@ -135,6 +147,11 @@
           "group": "1_monitor@2"
         },
         {
+          "command": "hardwareHacker.openRepl",
+          "when": "view == hardwareDevices && viewItem == hardwareDevice",
+          "group": "1_monitor@3"
+        },
+        {
           "command": "hardwareHacker.readChipInfo",
           "when": "view == hardwareDevices && viewItem == hardwareDevice",
           "group": "2_flash@1"
@@ -145,9 +162,14 @@
           "group": "2_flash@2"
         },
         {
-          "command": "hardwareHacker.eraseFlash",
+          "command": "hardwareHacker.flashMicroPython",
           "when": "view == hardwareDevices && viewItem == hardwareDevice",
           "group": "2_flash@3"
+        },
+        {
+          "command": "hardwareHacker.eraseFlash",
+          "when": "view == hardwareDevices && viewItem == hardwareDevice",
+          "group": "2_flash@4"
         }
       ]
     },
@@ -190,6 +212,16 @@
           "type": "number",
           "default": 460800,
           "description": "Baud rate used for flashing/erasing (separate from the serial monitor baud rate)."
+        },
+        "hardwareHacker.flash.micropythonBoard": {
+          "type": "string",
+          "default": "ESP32_GENERIC_S3",
+          "description": "Default MicroPython board id used by \"Flash MicroPython\" (as shown in the micropython.org/download URL, e.g. ESP32_GENERIC_S3, ESP32_GENERIC, ESP32_GENERIC_C3). You can change it per-flash when prompted."
+        },
+        "hardwareHacker.repl.baudRate": {
+          "type": "number",
+          "default": 115200,
+          "description": "Baud rate used when opening the MicroPython REPL (MicroPython's REPL runs at 115200)."
         }
       }
     }

@@ -142,6 +142,36 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   );
 
+  const flashMicroPythonCmd = vscode.commands.registerCommand(
+    "hardwareHacker.flashMicroPython",
+    async (node?: DeviceNode) => {
+      const path = await resolveTargetPath(node, scanner);
+      if (path) {
+        await flasher.flashMicroPython(path);
+      }
+    }
+  );
+
+  const openReplCmd = vscode.commands.registerCommand(
+    "hardwareHacker.openRepl",
+    async (node?: DeviceNode) => {
+      const path = await resolveTargetPath(node, scanner);
+      if (path) {
+        const baudRate = vscode.workspace
+          .getConfiguration("hardwareHacker.repl")
+          .get<number>("baudRate", 115200);
+        // MicroPython echoes typed characters itself and its REPL expects a bare
+        // CR on Enter, so force local echo off and a CR line ending.
+        monitors.open(path, {
+          baudRate,
+          localEcho: false,
+          lineEnding: "\r",
+          label: "MicroPython REPL",
+        });
+      }
+    }
+  );
+
   const eraseFlashCmd = vscode.commands.registerCommand(
     "hardwareHacker.eraseFlash",
     async (node?: DeviceNode) => {
@@ -164,6 +194,8 @@ export function activate(context: vscode.ExtensionContext): void {
     sendTextCmd,
     readChipInfoCmd,
     flashFirmwareCmd,
+    flashMicroPythonCmd,
+    openReplCmd,
     eraseFlashCmd
   );
 
