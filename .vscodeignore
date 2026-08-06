@@ -1,0 +1,15 @@
+# Files excluded from the packaged .vsix.
+# We ship the bundled dist/ output plus the serialport native module, not source.
+.vscode/**
+src/**
+out/**
+**/*.ts
+**/*.map
+esbuild.js
+tsconfig.json
+.gitignore
+.editorconfig
+
+# Keep node_modules OUT of ignore for serialport — it must ship because it is
+# marked `external` in the bundle. vsce includes production dependencies by
+# default, so we do not add node_modules here.

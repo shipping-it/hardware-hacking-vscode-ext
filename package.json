@@ -1,0 +1,206 @@
+{
+  "name": "hardware-hacker",
+  "displayName": "Hardware Hacker",
+  "description": "Detect, identify, and (soon) flash & talk to hardware devices like the ESP32 family directly from VS Code.",
+  "version": "0.1.0",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "esp32",
+    "esp32-s3",
+    "serial",
+    "usb",
+    "hardware",
+    "embedded",
+    "flashing"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onView:hardwareDevices"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "hardware-hacker",
+          "title": "Hardware Hacker",
+          "icon": "media/chip.svg"
+        }
+      ]
+    },
+    "views": {
+      "hardware-hacker": [
+        {
+          "id": "hardwareDevices",
+          "name": "Devices",
+          "icon": "media/chip.svg",
+          "contextualTitle": "Hardware Devices"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "hardwareHacker.refreshDevices",
+        "title": "Refresh Devices",
+        "category": "Hardware Hacker",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "hardwareHacker.copyDeviceInfo",
+        "title": "Copy Device Info",
+        "category": "Hardware Hacker",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "hardwareHacker.connect",
+        "title": "Open Serial Monitor",
+        "category": "Hardware Hacker",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "hardwareHacker.disconnect",
+        "title": "Disconnect Serial Monitor",
+        "category": "Hardware Hacker",
+        "icon": "$(debug-disconnect)"
+      },
+      {
+        "command": "hardwareHacker.setBaudRate",
+        "title": "Set Baud Rate",
+        "category": "Hardware Hacker"
+      },
+      {
+        "command": "hardwareHacker.sendText",
+        "title": "Send Text to Device",
+        "category": "Hardware Hacker"
+      },
+      {
+        "command": "hardwareHacker.readChipInfo",
+        "title": "Read Chip Info",
+        "category": "Hardware Hacker",
+        "icon": "$(info)"
+      },
+      {
+        "command": "hardwareHacker.flashFirmware",
+        "title": "Flash Firmware…",
+        "category": "Hardware Hacker",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "hardwareHacker.eraseFlash",
+        "title": "Erase Flash",
+        "category": "Hardware Hacker",
+        "icon": "$(trash)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "hardwareHacker.refreshDevices",
+          "when": "view == hardwareDevices",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "hardwareHacker.connect",
+          "when": "view == hardwareDevices && viewItem == hardwareDevice",
+          "group": "inline@1"
+        },
+        {
+          "command": "hardwareHacker.copyDeviceInfo",
+          "when": "view == hardwareDevices && viewItem == hardwareDevice",
+          "group": "inline@2"
+        },
+        {
+          "command": "hardwareHacker.connect",
+          "when": "view == hardwareDevices && viewItem == hardwareDevice",
+          "group": "1_monitor@1"
+        },
+        {
+          "command": "hardwareHacker.disconnect",
+          "when": "view == hardwareDevices && viewItem == hardwareDevice",
+          "group": "1_monitor@2"
+        },
+        {
+          "command": "hardwareHacker.readChipInfo",
+          "when": "view == hardwareDevices && viewItem == hardwareDevice",
+          "group": "2_flash@1"
+        },
+        {
+          "command": "hardwareHacker.flashFirmware",
+          "when": "view == hardwareDevices && viewItem == hardwareDevice",
+          "group": "2_flash@2"
+        },
+        {
+          "command": "hardwareHacker.eraseFlash",
+          "when": "view == hardwareDevices && viewItem == hardwareDevice",
+          "group": "2_flash@3"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Hardware Hacker",
+      "properties": {
+        "hardwareHacker.monitor.baudRate": {
+          "type": "number",
+          "default": 115200,
+          "description": "Default baud rate used when opening the serial monitor."
+        },
+        "hardwareHacker.monitor.lineEnding": {
+          "type": "string",
+          "enum": [
+            "crlf",
+            "lf",
+            "cr",
+            "none"
+          ],
+          "enumDescriptions": [
+            "Carriage return + line feed (\\r\\n)",
+            "Line feed only (\\n)",
+            "Carriage return only (\\r)",
+            "Send nothing extra on Enter"
+          ],
+          "default": "crlf",
+          "description": "Bytes sent to the device when you press Enter in the serial monitor."
+        },
+        "hardwareHacker.monitor.localEcho": {
+          "type": "boolean",
+          "default": true,
+          "description": "Echo characters you type back into the serial monitor (useful when the device does not echo)."
+        },
+        "hardwareHacker.flash.esptoolPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path or command for esptool. Leave empty to auto-detect (esptool, esptool.py, or python -m esptool)."
+        },
+        "hardwareHacker.flash.baudRate": {
+          "type": "number",
+          "default": 460800,
+          "description": "Baud rate used for flashing/erasing (separate from the serial monitor baud rate)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "compile-tests": "tsc -p ./",
+    "package": "vsce package"
+  },
+  "dependencies": {
+    "serialport": "^12.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.9.2",
+    "esbuild": "^0.28.1",
+    "typescript": "^5.3.0"
+  }
+}
