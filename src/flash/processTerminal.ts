@@ -7,6 +7,11 @@
 //
 // Steps run sequentially in the same terminal; if a step exits non-zero the
 // remaining steps are skipped (e.g. don't write_flash if erase_flash failed).
+//
+// The terminal is intentionally left OPEN when the run finishes: we never fire
+// onDidClose, so VS Code keeps the tab around and the user can read the full
+// output (and any error) and close it themselves. A completion callback lets the
+// caller run cleanup (e.g. delete a downloaded temp image) without closing it.
 
 import * as vscode from "vscode";
 import { spawn, ChildProcess } from "child_process";
@@ -21,21 +26,28 @@ export class ProcessPseudoterminal implements vscode.Pseudoterminal {
   private readonly writeEmitter = new vscode.EventEmitter<string>();
   readonly onDidWrite: vscode.Event<string> = this.writeEmitter.event;
 
-  private readonly closeEmitter = new vscode.EventEmitter<number | void>();
-  readonly onDidClose: vscode.Event<number | void> = this.closeEmitter.event;
-
   private readonly steps: CommandStep[];
   private child?: ChildProcess;
   private aborted = false;
+  private finished = false;
 
-  constructor(steps: CommandStep[] | CommandStep) {
+  /**
+   * @param steps      one command, or a sequence run in order.
+   * @param onComplete called once when the run ends (success, failure, or
+   *                   abort) with the last exit code. Does not close the terminal.
+   */
+  constructor(
+    steps: CommandStep[] | CommandStep,
+    private readonly onComplete?: (code: number) => void
+  ) {
     this.steps = Array.isArray(steps) ? steps : [steps];
   }
 
   open(): void {
-    void this.runFrom(0);
+    this.runFrom(0);
   }
 
+  // Called by VS Code when the user closes the terminal tab.
   close(): void {
     this.aborted = true;
     this.child?.kill();
@@ -59,8 +71,11 @@ export class ProcessPseudoterminal implements vscode.Pseudoterminal {
       // All steps completed successfully.
       this.line("");
       this.line("\x1b[32m[done]\x1b[0m");
-      this.line("\x1b[2m(close this terminal when finished)\x1b[0m");
-      this.closeEmitter.fire(0);
+      this.line(
+        "\x1b[2m(finished — this terminal stays open so you can read the " +
+          "output; close it when you're done)\x1b[0m"
+      );
+      this.complete(0);
       return;
     }
 
@@ -74,7 +89,7 @@ export class ProcessPseudoterminal implements vscode.Pseudoterminal {
       this.child = spawn(step.command, step.args, { windowsHide: true });
     } catch (err) {
       this.line(`\x1b[31mfailed to start: ${message(err)}\x1b[0m`);
-      this.closeEmitter.fire(1);
+      this.complete(1);
       return;
     }
 
@@ -87,7 +102,7 @@ export class ProcessPseudoterminal implements vscode.Pseudoterminal {
       if (this.aborted) {
         this.line("");
         this.line("\x1b[31m[aborted]\x1b[0m");
-        this.closeEmitter.fire(code ?? 1);
+        this.complete(code ?? 1);
         return;
       }
       if (code !== 0) {
@@ -97,14 +112,26 @@ export class ProcessPseudoterminal implements vscode.Pseudoterminal {
         if (index < this.steps.length - 1) {
           this.line("\x1b[2m(remaining steps skipped)\x1b[0m");
         }
-        this.line("\x1b[2m(close this terminal when finished)\x1b[0m");
-        this.closeEmitter.fire(code ?? 1);
+        this.line(
+          "\x1b[2m(this terminal stays open so you can read the error; " +
+            "close it when you're done)\x1b[0m"
+        );
+        this.complete(code ?? 1);
         return;
       }
       // Success: on to the next step.
       this.line("");
       this.runFrom(index + 1);
     });
+  }
+
+  /** Fire the completion callback once. Deliberately does NOT close the terminal. */
+  private complete(code: number): void {
+    if (this.finished) {
+      return;
+    }
+    this.finished = true;
+    this.onComplete?.(code);
   }
 
   private emit(chunk: Buffer): void {

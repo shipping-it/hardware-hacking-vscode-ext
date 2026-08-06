@@ -133,6 +133,7 @@ export class Flasher {
       this.step(devicePath, inv, ["erase_flash"]),
       this.step(devicePath, inv, ["write_flash", offset, localPath]),
     ];
+    // Delete the downloaded image once the run finishes (the terminal stays open).
     this.runSteps(`esptool micropython ${devicePath}`, steps, () =>
       this.cleanupTemp(localPath)
     );
@@ -180,12 +181,9 @@ export class Flasher {
   private runSteps(
     name: string,
     steps: CommandStep[],
-    onClose?: () => void
+    onComplete?: () => void
   ): void {
-    const pty = new ProcessPseudoterminal(steps);
-    if (onClose) {
-      pty.onDidClose(() => onClose());
-    }
+    const pty = new ProcessPseudoterminal(steps, onComplete);
     const terminal = vscode.window.createTerminal({ name, pty });
     terminal.show();
   }
