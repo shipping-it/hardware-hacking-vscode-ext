@@ -4,6 +4,7 @@
   "description": "Detect, identify, and (soon) flash & talk to hardware devices like the ESP32 family directly from VS Code.",
   "version": "0.1.0",
   "publisher": "local",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/shipping-it/hardware-hacking-vscode-ext.git"
