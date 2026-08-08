@@ -349,12 +349,22 @@ pattern**, and new external-tool integrations should copy it:
 
 ```bash
 npm install            # install deps (pulls the native serialport binary)
-npm run build          # esbuild → dist/extension.js
+npm run bundle         # esbuild → dist/extension.js (pure bundle, used by F5)
+npm run build          # bundle + package + install the .vsix into VS Code
+npm run install-latest # package + install only (wraps install_latest.ps1)
 npm run watch          # rebuild on change (use with the Extension Dev Host)
 npm run compile-tests  # tsc type-check only (no emit used for shipping)
 npm run package        # vsce package → hardware-hacker-<version>.vsix
 ```
 
+- `npm run build` is the one-shot "get the latest into my editor" path: it
+  bundles, then runs [`install_latest.ps1`](install_latest.ps1) (`vsce package`
+  + `code --install-extension --force`). Windows-only by design (PowerShell).
+- **Recursion guard:** `vscode:prepublish` must invoke `node esbuild.js`
+  directly, never `npm run build` — `build` runs `vsce package`, which runs
+  `vscode:prepublish`, so pointing prepublish back at `build` would loop
+  forever. Same reason the F5 `preLaunchTask` uses the pure `npm: bundle`
+  task: a debug launch should not package/install into the real VS Code.
 - Press **F5** (or Run → Start Debugging) to launch the Extension Development
   Host with the extension loaded.
 - The bundle marks `vscode` and `serialport` as `external`

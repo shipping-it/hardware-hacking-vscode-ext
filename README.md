@@ -45,13 +45,17 @@ Use this while hacking on the extension itself — it launches a second VS Code 
 
 ```bash
 npm install
-npm run build
+npm run bundle
 ```
 
 Then press **F5** in VS Code (or Run → *Run Extension*). A new window opens with the
 **Hardware Hacker** icon in the Activity Bar.
 
-For an auto-rebuild loop while you edit, run the watcher instead of `npm run build`:
+> `npm run bundle` is the pure esbuild step. `npm run build` does more: it bundles,
+> packages, **and installs** the extension into your everyday VS Code (see the next
+> section) — you don't need that just to F5.
+
+For an auto-rebuild loop while you edit, run the watcher instead of `npm run bundle`:
 
 ```bash
 npm run watch
@@ -65,6 +69,18 @@ npm run watch
 
 Use this to install Hardware Hacker into your **everyday VS Code** as a real extension
 (no F5, no dev window). It packages the extension into a `.vsix` file and installs it.
+
+**The short way** — one command does all of the steps below (bundle → package →
+`code --install-extension --force`), then you just reload VS Code:
+
+```bash
+npm run build
+```
+
+(equivalently: `.\install_latest.ps1`, which is what it runs under the hood; use
+`.\install_latest.ps1 -CodeCommand code-insiders` for Insiders).
+
+**Or step by step:**
 
 **1. Install dependencies** (skip if you already did):
 

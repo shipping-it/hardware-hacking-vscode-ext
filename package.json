@@ -268,8 +268,10 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run build",
-    "build": "node esbuild.js",
+    "vscode:prepublish": "node esbuild.js",
+    "bundle": "node esbuild.js",
+    "build": "node esbuild.js && npm run install-latest",
+    "install-latest": "powershell -NoProfile -ExecutionPolicy Bypass -File install_latest.ps1",
     "watch": "node esbuild.js --watch",
     "compile-tests": "tsc -p ./",
     "package": "vsce package"
