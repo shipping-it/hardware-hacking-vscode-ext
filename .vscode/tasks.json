@@ -3,14 +3,14 @@
   "tasks": [
     {
       "type": "npm",
-      "script": "build",
+      "script": "bundle",
       "group": {
         "kind": "build",
         "isDefault": true
       },
       "problemMatcher": "$esbuild",
-      "label": "npm: build",
-      "detail": "Bundle the extension with esbuild"
+      "label": "npm: bundle",
+      "detail": "Bundle the extension with esbuild (no packaging/install — used by F5)"
     },
     {
       "type": "npm",

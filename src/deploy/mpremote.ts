@@ -94,6 +94,38 @@ function verify(inv: MpremoteInvocation): Promise<boolean> {
 /** Reset the cached result (e.g. after the user changes the configured path). */
 export function resetMpremoteCache(): void {
   cached = undefined;
+  cachedPython = undefined;
+}
+
+// undefined = not probed yet, null = probed and not found.
+let cachedPython: string | null | undefined;
+
+/**
+ * Locate a runnable Python interpreter. Used by manifest deploys to run a
+ * firmware repo's `tools/build.py` — mpremote itself may have been found as a
+ * bare console script, which tells us nothing about how to invoke Python.
+ */
+export async function locatePython(): Promise<string | undefined> {
+  if (cachedPython !== undefined) {
+    return cachedPython ?? undefined;
+  }
+
+  // If mpremote resolved to a `<python> -m mpremote` form, that command is
+  // already a verified interpreter — no need to probe again.
+  if (cached && cached.baseArgs[0] === "-m") {
+    cachedPython = cached.command;
+    return cached.command;
+  }
+
+  for (const candidate of ["python", "python3", "py"]) {
+    if (await verify({ command: candidate, baseArgs: [] })) {
+      cachedPython = candidate;
+      return candidate;
+    }
+  }
+
+  cachedPython = null;
+  return undefined;
 }
 
 /** User-facing message shown when mpremote cannot be found. */

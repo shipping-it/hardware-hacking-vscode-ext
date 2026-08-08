@@ -45,13 +45,17 @@ Use this while hacking on the extension itself — it launches a second VS Code 
 
 ```bash
 npm install
-npm run build
+npm run bundle
 ```
 
 Then press **F5** in VS Code (or Run → *Run Extension*). A new window opens with the
 **Hardware Hacker** icon in the Activity Bar.
 
-For an auto-rebuild loop while you edit, run the watcher instead of `npm run build`:
+> `npm run bundle` is the pure esbuild step. `npm run build` does more: it bundles,
+> packages, **and installs** the extension into your everyday VS Code (see the next
+> section) — you don't need that just to F5.
+
+For an auto-rebuild loop while you edit, run the watcher instead of `npm run bundle`:
 
 ```bash
 npm run watch
@@ -65,6 +69,18 @@ npm run watch
 
 Use this to install Hardware Hacker into your **everyday VS Code** as a real extension
 (no F5, no dev window). It packages the extension into a `.vsix` file and installs it.
+
+**The short way** — one command does all of the steps below (bundle → package →
+`code --install-extension --force`), then you just reload VS Code:
+
+```bash
+npm run build
+```
+
+(equivalently: `.\install_latest.ps1`, which is what it runs under the hood; use
+`.\install_latest.ps1 -CodeCommand code-insiders` for Insiders).
+
+**Or step by step:**
 
 **1. Install dependencies** (skip if you already did):
 
@@ -215,6 +231,53 @@ When it finishes, use **Open MicroPython REPL** (above) to talk to the board.
 
 The extension auto-detects `esptool`, `esptool.py`, or `python -m esptool`.
 
+### Deploying Python to the board
+
+**Deploy Python to Device…** (device right-click menu, editor title/context menu on
+`.py` files, or the Command Palette) copies your code to a MicroPython board with
+[`mpremote`](https://docs.micropython.org/en/latest/reference/mpremote.html)
+(`pip install mpremote`). It works in one of two ways, detected automatically.
+
+#### Deploying from a manifest
+
+If your firmware repo produces a **deployment manifest** — a
+`build/deploy.manifest.json` plus a staged bundle under `build/fs/`, emitted by
+the repo's own build (e.g. `python tools/build.py build`; format spec:
+`docs/DEPLOY-FORMAT.md` in the reference `ha-connector` repo) — the extension
+deploys **exactly what the manifest lists**: installs each `mip` package,
+copies each staged file to its device path, and resets if the manifest says so.
+No import scanning, no additions, no omissions — so data files (`secrets.json`),
+`mip` packages, and unimported files (`boot.py`) all reach the board and it
+boots fully provisioned.
+
+The manifest is found by walking up from the deployed file (nearest wins), or
+directly at the workspace folder root when you deploy from the device tree.
+Before touching the board, the extension verifies every staged file against the
+manifest's sizes and sha256 hashes (on mismatch: re-run the build), and warns if
+sources changed after the build — offering to run the repo's build for you
+(only with your explicit confirmation). A confirmation dialog shows the full
+plan first; files marked `secret` are listed by name and size only, never shown.
+
+#### Deploying a file + its imports (no manifest)
+
+Without a manifest, the extension scans the file's `import` statements and ships
+the file plus its local dependencies. Choose per run:
+
+- **Install as main.py** — the file becomes `main.py` on the board (runs on
+  every boot), dependencies keep their paths, then the board resets.
+- **Run once** — dependencies are copied, the file streams its output via
+  `mpremote run` without being persisted.
+
+Imports that don't resolve to local files are assumed to be builtin/frozen on
+the board and are reported, not shipped. Note this scan can't see data files
+opened at runtime or `mip` packages — that's what the manifest flow is for.
+
+| Setting | Default | Meaning |
+|---------|---------|---------|
+| `hardwareHacker.deploy.mpremotePath` | *(empty)* | Override mpremote command/path; empty = auto-detect |
+| `hardwareHacker.deploy.sourceRoot` | *(empty)* | Import-scan mode: base dir for resolving imports; empty = the file's folder |
+| `hardwareHacker.deploy.resetAfter` | `true` | Import-scan mode: reset after installing as main.py (a manifest's own `resetAfter` wins) |
+
 ---
 
 ## Troubleshooting
@@ -262,6 +325,7 @@ extension to pick it up.
 - [x] Interactive serial monitor — read/write, baud rate, line endings (Milestone 2).
 - [x] Firmware flashing via `esptool` — read chip info / write_flash / erase_flash (Milestone 3).
 - [x] Guided MicroPython install (download from micropython.org + erase + flash) and a serial REPL (Milestone 4).
+- [x] Deploy Python to the board via `mpremote` — build-manifest deploys (exact, verified) with import-scan fallback (Milestone 5).
 - [ ] Raw USB (libusb) detection for DFU/JTAG-only modes that don't expose a serial port.
 
 ## Project layout
@@ -282,6 +346,11 @@ src/
     micropython.ts          fetch/parse micropython.org firmware list + download + offset
     processTerminal.ts      Pseudoterminal that runs child process step(s) (live progress)
     flasher.ts              chip info / write_flash / erase_flash / flash MicroPython
+  deploy/
+    mpremote.ts             locate mpremote (mpremote / python -m mpremote) + a Python
+    manifest.ts             find/parse/verify build/deploy.manifest.json (sha256, staleness)
+    importResolver.ts       static import scan -> local files to ship (fallback mode)
+    deployer.ts             deploy orchestration: manifest mode or scan mode + prompts
   ui/
     deviceTreeProvider.ts   the Activity Bar Devices tree
 ```

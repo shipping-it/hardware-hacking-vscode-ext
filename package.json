@@ -257,19 +257,21 @@
         "hardwareHacker.deploy.sourceRoot": {
           "type": "string",
           "default": "",
-          "description": "Base directory used to resolve imports and compute on-device paths when deploying. Leave empty to use the deployed file's own folder."
+          "description": "Base directory used to resolve imports and compute on-device paths when deploying. Leave empty to use the deployed file's own folder. Import-scan deploys only — not used when a build/deploy.manifest.json is deployed."
         },
         "hardwareHacker.deploy.resetAfter": {
           "type": "boolean",
           "default": true,
-          "description": "After installing a file as main.py, reset the board so it runs immediately."
+          "description": "After installing a file as main.py, reset the board so it runs immediately. Import-scan deploys only — a deploy manifest's own resetAfter takes precedence."
         }
       }
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run build",
-    "build": "node esbuild.js",
+    "vscode:prepublish": "node esbuild.js",
+    "bundle": "node esbuild.js",
+    "build": "node esbuild.js && npm run install-latest",
+    "install-latest": "powershell -NoProfile -ExecutionPolicy Bypass -File install_latest.ps1",
     "watch": "node esbuild.js --watch",
     "compile-tests": "tsc -p ./",
     "package": "vsce package"
