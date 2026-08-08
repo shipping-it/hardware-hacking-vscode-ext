@@ -20,6 +20,12 @@ import { spawn, ChildProcess } from "child_process";
 export interface CommandStep {
   command: string;
   args: string[];
+  /**
+   * Working directory for the process. Most steps don't care (we pass absolute
+   * paths everywhere), but a firmware repo's build script may resolve paths
+   * relative to its cwd, so manifest deploys set this to the repo root.
+   */
+  cwd?: string;
 }
 
 export class ProcessPseudoterminal implements vscode.Pseudoterminal {
@@ -86,7 +92,10 @@ export class ProcessPseudoterminal implements vscode.Pseudoterminal {
     this.line("");
 
     try {
-      this.child = spawn(step.command, step.args, { windowsHide: true });
+      this.child = spawn(step.command, step.args, {
+        windowsHide: true,
+        cwd: step.cwd, // undefined = inherit, same as before cwd existed
+      });
     } catch (err) {
       this.line(`\x1b[31mfailed to start: ${message(err)}\x1b[0m`);
       this.complete(1);
